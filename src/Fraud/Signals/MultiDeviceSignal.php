@@ -27,15 +27,34 @@ final class MultiDeviceSignal
 
     private function atomicSwap(RedisAdapter $redis, string $key, string $newValue, int $ttl): ?string
     {
+        // Return a sentinel instead of nil so callers can distinguish three states:
+        //   '__nil__'   → Lua ran successfully, key was absent (first scan)
+        //   string      → Lua ran successfully, previous device ID returned
+        //   null        → Lua eval entirely failed (old Redis, eval disabled, etc.)
+        //
+        // Without the sentinel, phpredis maps Lua nil → false and Predis maps it → null,
+        // making "no previous value" indistinguishable from "eval failed" on Predis,
+        // which caused the old non-atomic GET+SET fallback to fire on every first scan.
+        // The non-atomic fallback had a race: two concurrent requests could both GET
+        // null and both score 0.0, silently missing a multi-device fraud signal.
         $lua = <<<'LUA'
 local old = redis.call('GET', KEYS[1])
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
-return old
+return old or '__nil__'
 LUA;
         $result = $redis->eval($lua, [$redis->key($key)], [$newValue, (string) $ttl], 1);
-        if ($result !== null) return is_string($result) ? $result : null;
-        $old = $redis->get($key);
-        $redis->set($key, $newValue, $ttl);
-        return $old;
+
+        if ($result === '__nil__') {
+            return null; // key was absent — no previous device
+        }
+
+        if (is_string($result)) {
+            return $result; // previous device ID
+        }
+
+        // Lua eval failed entirely. The non-atomic GET+SET alternative is unsafe
+        // under concurrency, so we degrade gracefully: return null (score 0.0)
+        // rather than risk a race that corrupts the stored device or misses fraud.
+        return null;
     }
 }

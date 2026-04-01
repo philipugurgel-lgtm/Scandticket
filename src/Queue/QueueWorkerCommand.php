@@ -13,6 +13,7 @@ final class QueueWorkerCommand
 {
     private bool $stopping = false;
     private string $workerId;
+    private bool $heartbeatOk = false;
 
     public function __invoke(array $args, array $assoc): void
     {
@@ -40,6 +41,16 @@ final class QueueWorkerCommand
 
             $usedMb = memory_get_usage(true) / 1024 / 1024;
             if ($usedMb >= $memoryMb) { WP_CLI::warning("[worker:{$this->workerId}] Memory limit reached ({$usedMb}MB). Exiting."); break; }
+
+            // If the heartbeat cannot be written, the reaper cannot distinguish
+            // this worker from a dead one and will re-queue any jobs we claim,
+            // causing double-processing when Redis recovers. Pause until we can
+            // confirm our liveness via a successful heartbeat write.
+            if (!$this->heartbeatOk) {
+                WP_CLI::warning("[worker:{$this->workerId}] Heartbeat write failed — Redis unavailable. Pausing job claims.");
+                sleep(2);
+                continue;
+            }
 
             $envelope = $queue->claim($this->workerId, $timeout);
             if ($envelope === null) continue;
@@ -73,8 +84,16 @@ final class QueueWorkerCommand
     private function sendHeartbeat(): void
     {
         $redis = RedisAdapter::connection();
-        if ($redis === null) return;
-        $redis->set(RedisKeys::workerHeartbeat($this->workerId), json_encode(['pid' => getmypid(), 'started_at' => time(), 'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 1)]), 30);
+        if ($redis === null) {
+            $this->heartbeatOk = false;
+            return;
+        }
+        $written = $redis->set(
+            RedisKeys::workerHeartbeat($this->workerId),
+            json_encode(['pid' => getmypid(), 'started_at' => time(), 'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 1)]),
+            30,
+        );
+        $this->heartbeatOk = $written;
     }
 
     private function removeHeartbeat(): void

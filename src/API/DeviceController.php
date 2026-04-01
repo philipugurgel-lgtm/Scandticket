@@ -22,7 +22,14 @@ final class DeviceController
 
     public function revoke(WP_REST_Request $request): WP_REST_Response
     {
-        Container::instance()->make(DeviceRepository::class)->deactivate((int) $request->get_param('id'));
+        $repo = Container::instance()->make(DeviceRepository::class);
+        $id   = (int) $request->get_param('id');
+
+        if ($repo->find($id) === null) {
+            return new WP_REST_Response(['message' => 'Device not found.'], 404);
+        }
+
+        $repo->deactivate($id);
         return new WP_REST_Response(['message' => 'Device revoked.'], 200);
     }
 }

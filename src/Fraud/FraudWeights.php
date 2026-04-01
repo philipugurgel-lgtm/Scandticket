@@ -29,6 +29,21 @@ final class FraudWeights
     public static function save(array $input): array
     {
         $validated = self::merge(self::DEFAULTS, $input);
+
+        // Guard against misconfiguration: weights summing above 1.0 cause every
+        // scan to reach the block threshold once any single signal fires at full
+        // strength. Reject the entire update and keep the current safe values.
+        $sum = array_sum($validated);
+        if ($sum > 1.0 + 1e-9) {
+            throw new \InvalidArgumentException(
+                sprintf(
+                    'Fraud weights sum to %.4f, which exceeds 1.0. ' .
+                    'All weights must sum to at most 1.0 to prevent blocking every scan.',
+                    $sum,
+                )
+            );
+        }
+
         update_option('scandticket_fraud_weights', wp_json_encode($validated));
         self::$cache = null;
         return $validated;

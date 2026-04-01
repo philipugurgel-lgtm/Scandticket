@@ -99,7 +99,14 @@ final class ScanProcessor
             $result = $this->process($rawInput, $device);
             if (is_wp_error($result)) {
                 $errorData = $result->get_error_data();
-                $results[] = ['index' => $i, 'code' => $result->get_error_code(), 'error' => $result->get_error_message(), 'status' => $errorData['status'] ?? 400, 'retry' => $errorData['retry'] ?? false, 'step' => $errorData['step'] ?? 'unknown'];
+                // 'step' omitted — exposes internal pipeline stage names to callers.
+                $results[] = [
+                    'index'  => $i,
+                    'code'   => $result->get_error_code(),
+                    'error'  => $result->get_error_message(),
+                    'status' => $errorData['status'] ?? 400,
+                    'retry'  => $errorData['retry'] ?? false,
+                ];
             } else {
                 $results[] = array_merge(['index' => $i], $result);
             }

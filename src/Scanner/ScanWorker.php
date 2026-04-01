@@ -17,13 +17,30 @@ final class ScanWorker
         try {
             $table = $wpdb->prefix . 'scandticket_checkins';
             $inserted = $wpdb->insert($table, [
-                'ticket_id' => $job['ticket_id'], 'event_id' => $job['event_id'],
-                'device_id' => $job['device_id'], 'status' => 'checked_in',
-                'scanned_at' => $job['scanned_at'], 'processed_at' => gmdate('Y-m-d H:i:s'),
+                'ticket_id'       => $job['ticket_id'],
+                'event_id'        => $job['event_id'],
+                'device_id'       => $job['device_id'],
+                'status'          => 'checked_in',
+                'scanned_at'      => $job['scanned_at'],
+                'processed_at'    => gmdate('Y-m-d H:i:s'),
                 'idempotency_key' => $job['idempotency_key'],
-                'metadata' => json_encode($job['metadata'] ?? []),
+                'metadata'        => json_encode($job['metadata'] ?? []),
             ]);
-            if (!$inserted) throw new \RuntimeException('Failed to insert checkin record.');
+
+            if ($inserted === false) {
+                // MySQL error 1062 = duplicate entry for a unique key.
+                // Two requests raced through the non-atomic Redis-down fallback in
+                // IdempotencyGuard and both reached the INSERT. The ticket IS already
+                // checked in by the winning request. Return true so the caller does NOT
+                // roll back the nonce — leaving it consumed prevents replay.
+                if ((int) $wpdb->last_errno === 1062
+                    || str_contains((string) $wpdb->last_error, 'Duplicate entry')
+                ) {
+                    do_action('scandticket_checkin_idempotent_duplicate', $job);
+                    return true;
+                }
+                throw new \RuntimeException('Failed to insert checkin record: ' . $wpdb->last_error);
+            }
             $checkinId = (int) $wpdb->insert_id;
 
             $redis = RedisAdapter::connection();

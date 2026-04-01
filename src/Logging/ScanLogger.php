@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace ScandTicket\Logging;
 
+use ScandTicket\Core\HttpHelper;
 use ScandTicket\Security\QrPayload;
 
 final class ScanLogger
@@ -40,7 +41,6 @@ final class ScanLogger
 
     private function getClientIp(): string
     {
-        foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'] as $h) { if (!empty($_SERVER[$h])) { $ip = trim(strtok($_SERVER[$h], ',')); if (filter_var($ip, FILTER_VALIDATE_IP)) return $ip; } }
-        return '0.0.0.0';
+        return HttpHelper::getClientIp();
     }
 }

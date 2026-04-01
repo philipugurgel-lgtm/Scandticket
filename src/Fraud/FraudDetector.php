@@ -24,6 +24,13 @@ final class FraudDetector
         $deviceId = (int) ($device['id'] ?? 0);
         $ts       = (int) ($qrData['ts'] ?? time());
 
+        // Any zero ID means the payload or device context is malformed — running
+        // signals would corrupt shared Redis counters (e.g. fraud:rapid:0 would
+        // accumulate counts from every device with a missing ID).
+        if ($ticketId <= 0 || $eventId <= 0 || $deviceId <= 0) {
+            return new FraudScore(0.0, [], FraudWeights::get());
+        }
+
         $signals = [
             $this->duplicateSignal->evaluate($ticketId, $eventId),
             $this->rapidSignal->evaluate($deviceId),

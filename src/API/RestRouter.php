@@ -19,6 +19,6 @@ final class RestRouter
         register_rest_route(self::NS, '/devices/(?P<id>\d+)/revoke', ['methods' => WP_REST_Server::CREATABLE, 'callback' => [$c->make(DeviceController::class), 'revoke'], 'permission_callback' => fn() => current_user_can('manage_options')]);
         register_rest_route(self::NS, '/metrics', ['methods' => WP_REST_Server::READABLE, 'callback' => [$c->make(MetricsController::class), 'index'], 'permission_callback' => fn() => current_user_can('manage_options')]);
         register_rest_route(self::NS, '/checkins', ['methods' => WP_REST_Server::READABLE, 'callback' => [$c->make(CheckinController::class), 'index'], 'permission_callback' => fn() => current_user_can('manage_options')]);
-        register_rest_route(self::NS, '/health', ['methods' => WP_REST_Server::READABLE, 'callback' => [$c->make(HealthController::class), 'check'], 'permission_callback' => '__return_true']);
+        register_rest_route(self::NS, '/health', ['methods' => WP_REST_Server::READABLE, 'callback' => [$c->make(HealthController::class), 'check'], 'permission_callback' => fn() => current_user_can('manage_options')]);
     }
 }

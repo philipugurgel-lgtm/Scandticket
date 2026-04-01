@@ -48,7 +48,18 @@ final class Container
         }
 
         if (class_exists($abstract)) {
-            return new $abstract();
+            // Only auto-resolve classes that need no constructor arguments.
+            // Classes with required parameters must be explicitly registered to
+            // avoid silently constructing objects with uninitialised dependencies.
+            $ctor = (new \ReflectionClass($abstract))->getConstructor();
+            if ($ctor === null || $ctor->getNumberOfRequiredParameters() === 0) {
+                return new $abstract();
+            }
+            throw new RuntimeException(
+                "Service [{$abstract}] is not registered in the container and cannot be " .
+                'auto-resolved because its constructor requires parameters. ' .
+                'Register it via bind() or singleton() in a ServiceProvider.'
+            );
         }
 
         throw new RuntimeException("Service [{$abstract}] not found in container.");

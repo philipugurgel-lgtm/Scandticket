@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace ScandTicket\Auth;
 
 use ScandTicket\Core\Config;
+use ScandTicket\Core\HttpHelper;
 use ScandTicket\Core\RedisAdapter;
 use ScandTicket\Core\RedisKeys;
 use WP_Error;
@@ -101,6 +102,9 @@ final class DeviceAuthenticator
     {
         $redis = RedisAdapter::connection();
         if ($redis === null) {
+            // Redis unavailable: brute-force counting cannot be persisted.
+            // Fire an action so operators can alert on this degraded state.
+            do_action('scandticket_auth_bruteforce_redis_unavailable', $ip);
             return true;
         }
         $key = RedisKeys::authBruteForce($ip);
@@ -186,13 +190,6 @@ final class DeviceAuthenticator
 
     private static function getClientIp(): string
     {
-        $headers = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'];
-        foreach ($headers as $header) {
-            if (!empty($_SERVER[$header])) {
-                $ip = trim(strtok($_SERVER[$header], ','));
-                if (filter_var($ip, FILTER_VALIDATE_IP)) return $ip;
-            }
-        }
-        return '0.0.0.0';
+        return HttpHelper::getClientIp();
     }
 }

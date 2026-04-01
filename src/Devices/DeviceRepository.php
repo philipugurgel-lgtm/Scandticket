@@ -18,12 +18,22 @@ final class DeviceRepository
         return ['id' => (int) $wpdb->insert_id, 'token' => $rawToken, 'name' => $name];
     }
 
-    public function all(bool $activeOnly = true): array
+    public function all(bool $activeOnly = true, int $limit = 500, int $offset = 0): array
     {
         global $wpdb;
         $table = $wpdb->prefix . 'scandticket_devices';
-        $where = $activeOnly ? 'WHERE is_active = 1' : '';
-        return $wpdb->get_results("SELECT id, device_uid, name, event_ids, capabilities, last_seen_at, is_active, created_at FROM {$table} {$where} ORDER BY created_at DESC");
+
+        $sql = $activeOnly
+            ? $wpdb->prepare(
+                "SELECT id, device_uid, name, event_ids, capabilities, last_seen_at, is_active, created_at FROM {$table} WHERE is_active = 1 ORDER BY created_at DESC LIMIT %d OFFSET %d",
+                $limit, $offset,
+              )
+            : $wpdb->prepare(
+                "SELECT id, device_uid, name, event_ids, capabilities, last_seen_at, is_active, created_at FROM {$table} ORDER BY created_at DESC LIMIT %d OFFSET %d",
+                $limit, $offset,
+              );
+
+        return $wpdb->get_results($sql);
     }
 
     public function find(int $id): ?object
